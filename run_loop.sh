@@ -1,37 +1,38 @@
 #!/bin/bash
 # =============================================================================
-# DMS-Raptor: Automated Video-by-Video Experiment Loop
+# DMS-Raptor: Automated Batch Experiment Loop
 # =============================================================================
-# Downloads one video at a time from Google Drive, runs all experiments on CPU,
-# uploads results to Google Drive, cleans up, repeats.
+# Strategy:
+#   - Detection quality + Frame validation → GPU (same results, 100x faster)
+#   - Overnight pipeline (benchmarking)    → CPU (accurate timing traces)
+#   - Timing trials                        → SKIPPED (overnight gives per-frame timing)
+#
+# Batches 4 videos at a time, uploads to Google Drive between batches.
 #
 # Usage:
-#   bash run_loop.sh                    # run all videos
-#   bash run_loop.sh --dry-run          # just show what would be done
-#   bash run_loop.sh --video glass_ins  # run only one specific video
-#
-# Prerequisites:
-#   - rclone configured with "gdrive:" remote
-#   - Models already in ~/DMS_Clean/models/
-#   - Videos on Google Drive at the paths defined below
+#   bash run_loop.sh                    # all 12 videos in 3 batches
+#   bash run_loop.sh --batch 1          # only batch 1 (videos 1-4)
+#   bash run_loop.sh --batch 2          # only batch 2 (videos 5-8)
+#   bash run_loop.sh --batch 3          # only batch 3 (videos 9-12)
+#   bash run_loop.sh --dry-run          # preview without running
+#   bash run_loop.sh --max-frames=500   # quick test
 # =============================================================================
 
 set -e
 
-# ---- CONFIGURATION (EDIT THESE) ----
+# ---- CONFIGURATION ----
 GDRIVE_VIDEOS="gdrive:DMS_Test_videos"
 GDRIVE_RESULTS="gdrive:DMS_Experiment_Results"
 WORK_DIR="$HOME/DMS_Clean"
 MODELS_DIR="$WORK_DIR/models"
 VIDEOS_DIR="$WORK_DIR/videos"
 RESULTS_DIR="$WORK_DIR/results"
-DEVICE="cpu"
-# MAX_FRAMES=0 means all frames; set to e.g. 500 for quick test
 MAX_FRAMES=0
 ANNOTATE_POLICIES="conf_ema"
-# ------------------------------------
+BATCH_SIZE=4
+# ------------------------
 
-# Find Python: try venv, then python3, then python
+# Find Python
 if [ -f "$HOME/DMS_Raptor/venv/bin/python" ]; then
     PYTHON="$HOME/DMS_Raptor/venv/bin/python"
 elif [ -f "$WORK_DIR/venv/bin/python" ]; then
@@ -41,13 +42,11 @@ elif command -v python3 &>/dev/null; then
 elif command -v python &>/dev/null; then
     PYTHON="python"
 else
-    echo "ERROR: No python found"
-    exit 1
+    echo "ERROR: No python found"; exit 1
 fi
 
-# Video list: "gdrive_subpath|local_material_dir|short_name"
-# Edit this list to match your Google Drive structure
-VIDEOS=(
+# All 12 videos: "gdrive_subpath|material|short_name"
+ALL_VIDEOS=(
     "glass/glass_ins.mp4|glass|glass_ins"
     "glass/021_YUN_0001_111.mp4|glass|021_YUN_0001_111"
     "glass/161_YUN_0001_96.mp4|glass|161_YUN_0001_96"
@@ -62,199 +61,202 @@ VIDEOS=(
     "porcelain/porcelain_maybe.mp4|porcelain|porcelain_maybe"
 )
 
-DRY_RUN=false
-ONLY_VIDEO=""
-
 # Parse args
+DRY_RUN=false
+ONLY_BATCH=0  # 0 = all batches
 for arg in "$@"; do
     case $arg in
         --dry-run) DRY_RUN=true ;;
-        --video) shift; ONLY_VIDEO="$2" ;;
-        --video=*) ONLY_VIDEO="${arg#*=}" ;;
+        --batch) shift ;;
+        --batch=*) ONLY_BATCH="${arg#*=}" ;;
+        [1-3]) ONLY_BATCH="$arg" ;;
         --max-frames=*) MAX_FRAMES="${arg#*=}" ;;
     esac
 done
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
+# Colors
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 log() { echo -e "${CYAN}[$(date '+%H:%M:%S')]${NC} $1"; }
 ok()  { echo -e "${GREEN}[OK]${NC} $1"; }
 warn(){ echo -e "${YELLOW}[WARN]${NC} $1"; }
 err() { echo -e "${RED}[ERR]${NC} $1"; }
 
-# Check prerequisites
 check_prereqs() {
-    if ! command -v rclone &>/dev/null; then
-        err "rclone not found. Install it first."
-        exit 1
-    fi
-    if ! rclone listremotes | grep -q "gdrive:"; then
-        err "rclone 'gdrive:' remote not configured. Run: rclone config"
-        exit 1
-    fi
-    if [ ! -d "$MODELS_DIR" ] || [ -z "$(ls $MODELS_DIR/*.pt 2>/dev/null)" ]; then
-        err "No models found in $MODELS_DIR"
-        exit 1
-    fi
-    log "Disk free: $(df -h ~ | tail -1 | awk '{print $4}')"
+    command -v rclone &>/dev/null || { err "rclone not found"; exit 1; }
+    rclone listremotes | grep -q "gdrive:" || { err "gdrive: not configured"; exit 1; }
+    [ -d "$MODELS_DIR" ] && ls $MODELS_DIR/*.pt &>/dev/null || { err "No models in $MODELS_DIR"; exit 1; }
     log "Python: $PYTHON ($($PYTHON --version 2>&1))"
+    log "Disk free: $(df -h ~ | tail -1 | awk '{print $4}')"
+
+    # Check GPU availability
+    if $PYTHON -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+        HAS_GPU=true
+        log "GPU: available (will use for detection quality + validation)"
+    else
+        HAS_GPU=false
+        warn "No GPU detected. All phases will use CPU (slower)."
+    fi
 }
 
-# Download one video from Google Drive
+# Download one video
 download_video() {
-    local gdrive_path="$1"
-    local material="$2"
-    local dest_dir="$VIDEOS_DIR/$material"
-
-    mkdir -p "$dest_dir"
+    local gdrive_path="$1" material="$2"
+    mkdir -p "$VIDEOS_DIR/$material"
     log "Downloading: $gdrive_path"
-
-    if $DRY_RUN; then
-        log "[DRY-RUN] Would download $GDRIVE_VIDEOS/$gdrive_path -> $dest_dir/"
-        return 0
-    fi
-
-    rclone copy "$GDRIVE_VIDEOS/$gdrive_path" "$dest_dir/" --progress
-    ok "Downloaded to $dest_dir/"
-    ls -lh "$dest_dir/"
+    $DRY_RUN && { log "[DRY-RUN] skip download"; return 0; }
+    rclone copy "$GDRIVE_VIDEOS/$gdrive_path" "$VIDEOS_DIR/$material/" --progress
+    ok "Downloaded"
 }
 
-# Run all experiments on one video
-run_experiments() {
-    local material="$1"
-    local short_name="$2"
-
-    log "Running experiments: $material/$short_name (device=$DEVICE)"
-
-    if $DRY_RUN; then
-        log "[DRY-RUN] Would run: python dms_experiment.py run-all --device $DEVICE --max-frames $MAX_FRAMES"
-        return 0
-    fi
-
+# Run experiments for one video: GPU phases first, then CPU benchmarking
+run_single_video() {
+    local material="$1" short_name="$2"
     cd "$WORK_DIR"
 
-    # Build max-frames arg
     MF_ARG=""
-    if [ "$MAX_FRAMES" -gt 0 ] 2>/dev/null; then
-        MF_ARG="--max-frames $MAX_FRAMES"
+    [ "$MAX_FRAMES" -gt 0 ] 2>/dev/null && MF_ARG="--max-frames $MAX_FRAMES"
+
+    # ---- Phase 1: Detection Quality on GPU (both models per frame → P/R/F1) ----
+    if $HAS_GPU; then
+        GPU_DEV="cuda"
+    else
+        GPU_DEV="cpu"
     fi
 
-    $PYTHON dms_experiment.py run-all \
-        --models-dir "$MODELS_DIR" \
-        --videos-dir "$VIDEOS_DIR" \
-        --results-dir "$RESULTS_DIR" \
-        --device "$DEVICE" \
-        --annotate-policies $ANNOTATE_POLICIES \
-        $MF_ARG
+    log "Phase 1/4: Detection quality ($GPU_DEV)..."
+    $DRY_RUN || $PYTHON dms_experiment.py detection \
+        --models-dir "$MODELS_DIR" --videos-dir "$VIDEOS_DIR" \
+        --results-dir "$RESULTS_DIR" --device "$GPU_DEV" $MF_ARG
 
-    ok "Experiments complete for $material/$short_name"
+    # ---- Phase 2: Frame-level validation on GPU (IoU + 30 sample images) ----
+    log "Phase 2/4: Frame validation ($GPU_DEV)..."
+    $DRY_RUN || $PYTHON dms_experiment.py validation \
+        --models-dir "$MODELS_DIR" --videos-dir "$VIDEOS_DIR" \
+        --results-dir "$RESULTS_DIR" --device "$GPU_DEV" --samples 30 $MF_ARG
+
+    # ---- Phase 3: Overnight pipeline on CPU (benchmarkable timing) ----
+    log "Phase 3/4: Overnight pipeline (cpu - benchmarking)..."
+    $DRY_RUN || $PYTHON dms_experiment.py overnight \
+        --models-dir "$MODELS_DIR" --videos-dir "$VIDEOS_DIR" \
+        --results-dir "$RESULTS_DIR" --device cpu \
+        --annotate-policies $ANNOTATE_POLICIES $MF_ARG
+
+    # ---- Phase 4: Plots + Report ----
+    log "Phase 4/4: Generating plots + report..."
+    $DRY_RUN || $PYTHON dms_experiment.py plots --results-dir "$RESULTS_DIR"
+    $DRY_RUN || $PYTHON dms_experiment.py report --results-dir "$RESULTS_DIR"
+
+    ok "All phases complete for $material/$short_name"
 }
 
 # Upload results to Google Drive
 upload_results() {
-    local short_name="$1"
-
     log "Uploading results to Google Drive..."
-
-    if $DRY_RUN; then
-        log "[DRY-RUN] Would upload $RESULTS_DIR/ -> $GDRIVE_RESULTS/"
-        return 0
-    fi
-
+    $DRY_RUN && { log "[DRY-RUN] skip upload"; return 0; }
     rclone copy "$RESULTS_DIR/" "$GDRIVE_RESULTS/" --progress
     ok "Results uploaded to $GDRIVE_RESULTS/"
 }
 
-# Clean up video and results to free space
+# Clean up videos and results
 cleanup() {
-    local material="$1"
-    local short_name="$2"
-
-    log "Cleaning up to free space..."
-
-    if $DRY_RUN; then
-        log "[DRY-RUN] Would delete $VIDEOS_DIR/ and $RESULTS_DIR/"
-        return 0
-    fi
-
-    # Remove downloaded video
-    rm -rf "$VIDEOS_DIR"
-    # Remove local results (already uploaded to Drive)
-    rm -rf "$RESULTS_DIR"
-
-    ok "Cleaned up. Disk free: $(df -h ~ | tail -1 | awk '{print $4}')"
+    log "Cleaning up..."
+    $DRY_RUN && { log "[DRY-RUN] skip cleanup"; return 0; }
+    rm -rf "$VIDEOS_DIR" "$RESULTS_DIR"
+    ok "Cleaned. Disk free: $(df -h ~ | tail -1 | awk '{print $4}')"
 }
 
 # =============================================================================
-# MAIN LOOP
+# MAIN: Process in batches of 4
 # =============================================================================
-
 main() {
     echo ""
     echo "============================================================"
-    echo "  DMS-Raptor Automated Experiment Loop"
-    echo "  Device: $DEVICE | Videos: ${#VIDEOS[@]}"
+    echo "  DMS-Raptor: Batch Experiment Pipeline"
+    echo "  Total videos: ${#ALL_VIDEOS[@]} | Batch size: $BATCH_SIZE"
+    echo "  GPU phases: detection quality, frame validation"
+    echo "  CPU phases: overnight pipeline (benchmarking)"
+    echo "  Timing trials: SKIPPED (overnight has per-frame traces)"
     echo "  Max frames: $([ "$MAX_FRAMES" -gt 0 ] 2>/dev/null && echo $MAX_FRAMES || echo 'ALL')"
     echo "============================================================"
     echo ""
 
+    HAS_GPU=false
     check_prereqs
 
-    TOTAL=${#VIDEOS[@]}
-    DONE=0
-    FAILED=0
+    TOTAL=${#ALL_VIDEOS[@]}
+    NUM_BATCHES=$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE ))
+    GLOBAL_DONE=0
+    GLOBAL_FAILED=0
 
-    for entry in "${VIDEOS[@]}"; do
-        IFS='|' read -r gdrive_path material short_name <<< "$entry"
-
-        # Skip if --video filter is set and doesn't match
-        if [ -n "$ONLY_VIDEO" ] && [ "$short_name" != "$ONLY_VIDEO" ]; then
+    for ((batch=1; batch<=NUM_BATCHES; batch++)); do
+        # Skip batches if --batch filter is set
+        if [ "$ONLY_BATCH" -gt 0 ] 2>/dev/null && [ "$batch" -ne "$ONLY_BATCH" ]; then
             continue
         fi
 
-        DONE=$((DONE + 1))
+        START_IDX=$(( (batch - 1) * BATCH_SIZE ))
+        END_IDX=$(( START_IDX + BATCH_SIZE ))
+        [ "$END_IDX" -gt "$TOTAL" ] && END_IDX=$TOTAL
+
         echo ""
         echo "============================================================"
-        log "VIDEO $DONE/$TOTAL: $material/$short_name"
+        log "BATCH $batch/$NUM_BATCHES (videos $((START_IDX+1))-$END_IDX of $TOTAL)"
         echo "============================================================"
 
-        # Step 1: Download
-        if ! download_video "$gdrive_path" "$material"; then
-            err "Failed to download $short_name. Skipping."
-            FAILED=$((FAILED + 1))
-            continue
+        # Process each video in the batch
+        for ((i=START_IDX; i<END_IDX; i++)); do
+            IFS='|' read -r gdrive_path material short_name <<< "${ALL_VIDEOS[$i]}"
+            GLOBAL_DONE=$((GLOBAL_DONE + 1))
+
+            echo ""
+            log "--- Video $GLOBAL_DONE/$TOTAL: $material/$short_name ---"
+
+            # Download
+            if ! download_video "$gdrive_path" "$material"; then
+                err "Download failed: $short_name. Skipping."
+                GLOBAL_FAILED=$((GLOBAL_FAILED + 1))
+                continue
+            fi
+
+            # Run all phases
+            if ! run_single_video "$material" "$short_name"; then
+                err "Experiments failed: $short_name."
+                GLOBAL_FAILED=$((GLOBAL_FAILED + 1))
+            fi
+
+            # Delete video to free space for next (keep results until batch upload)
+            log "Removing video file..."
+            $DRY_RUN || rm -rf "$VIDEOS_DIR"
+
+            ok "Done: $material/$short_name"
+        done
+
+        # Upload entire batch results
+        echo ""
+        log "Uploading batch $batch results..."
+        if ! upload_results; then
+            err "Upload failed for batch $batch!"
+            warn "Results still in: $RESULTS_DIR"
+            warn "Manual: rclone copy $RESULTS_DIR/ $GDRIVE_RESULTS/"
         fi
 
-        # Step 2: Run experiments
-        if ! run_experiments "$material" "$short_name"; then
-            err "Experiments failed for $short_name."
-            FAILED=$((FAILED + 1))
-            # Still try to upload partial results
+        # Clean results to free space for next batch
+        cleanup
+
+        echo ""
+        ok "BATCH $batch/$NUM_BATCHES COMPLETE"
+        echo ""
+        if [ "$batch" -lt "$NUM_BATCHES" ] && [ "$ONLY_BATCH" -eq 0 ] 2>/dev/null; then
+            log "Starting next batch in 10 seconds... (Ctrl+C to pause)"
+            $DRY_RUN || sleep 10
         fi
-
-        # Step 3: Upload results
-        if ! upload_results "$short_name"; then
-            err "Upload failed for $short_name. Results kept locally."
-            warn "Manual upload needed: rclone copy $RESULTS_DIR/ $GDRIVE_RESULTS/"
-            continue
-        fi
-
-        # Step 4: Cleanup
-        cleanup "$material" "$short_name"
-
-        ok "Completed $material/$short_name ($DONE/$TOTAL)"
     done
 
     echo ""
     echo "============================================================"
-    echo "  LOOP COMPLETE"
-    echo "  Processed: $DONE | Failed: $FAILED"
-    echo "  Results on Google Drive: $GDRIVE_RESULTS"
+    echo "  ALL DONE"
+    echo "  Processed: $GLOBAL_DONE | Failed: $GLOBAL_FAILED"
+    echo "  Results: $GDRIVE_RESULTS"
     echo "============================================================"
 }
 
