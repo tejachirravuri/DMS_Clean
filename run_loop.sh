@@ -28,8 +28,22 @@ RESULTS_DIR="$WORK_DIR/results"
 DEVICE="cpu"
 # MAX_FRAMES=0 means all frames; set to e.g. 500 for quick test
 MAX_FRAMES=0
-ANNOTATE_POLICIES="conf_ema combined_hyst"
+ANNOTATE_POLICIES="conf_ema"
 # ------------------------------------
+
+# Find Python: try venv, then python3, then python
+if [ -f "$HOME/DMS_Raptor/venv/bin/python" ]; then
+    PYTHON="$HOME/DMS_Raptor/venv/bin/python"
+elif [ -f "$WORK_DIR/venv/bin/python" ]; then
+    PYTHON="$WORK_DIR/venv/bin/python"
+elif command -v python3 &>/dev/null; then
+    PYTHON="python3"
+elif command -v python &>/dev/null; then
+    PYTHON="python"
+else
+    echo "ERROR: No python found"
+    exit 1
+fi
 
 # Video list: "gdrive_subpath|local_material_dir|short_name"
 # Edit this list to match your Google Drive structure
@@ -88,6 +102,7 @@ check_prereqs() {
         exit 1
     fi
     log "Disk free: $(df -h ~ | tail -1 | awk '{print $4}')"
+    log "Python: $PYTHON ($($PYTHON --version 2>&1))"
 }
 
 # Download one video from Google Drive
@@ -129,7 +144,7 @@ run_experiments() {
         MF_ARG="--max-frames $MAX_FRAMES"
     fi
 
-    python dms_experiment.py run-all \
+    $PYTHON dms_experiment.py run-all \
         --models-dir "$MODELS_DIR" \
         --videos-dir "$VIDEOS_DIR" \
         --results-dir "$RESULTS_DIR" \
