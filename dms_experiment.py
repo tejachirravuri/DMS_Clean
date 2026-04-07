@@ -1650,7 +1650,7 @@ def generate_all_plots(results_dir: Path):
 
     plt.style.use("seaborn-v0_8-whitegrid")
     plt.rcParams.update({"font.size": 11, "figure.dpi": 150, "savefig.dpi": 300,
-                         "savefig.bbox_inches": "tight", "figure.figsize": (12, 7)})
+                         "figure.figsize": (12, 7)})
 
     figs_dir = results_dir / "figures"
     figs_dir.mkdir(parents=True, exist_ok=True)
