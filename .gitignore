@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Experiment outputs (large, re-generatable)
+results/
+*.mp4
+*.avi
+
+# Models (large, stored separately)
+models/*.pt
+
+# Videos (large, stored on Google Drive)
+videos/
+
+# Jupyter
+.ipynb_checkpoints/
