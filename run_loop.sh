@@ -203,7 +203,7 @@ main() {
         log "BATCH $batch/$NUM_BATCHES (videos $((START_IDX+1))-$END_IDX of $TOTAL)"
         echo "============================================================"
 
-        # Process each video in the batch
+        # Process each video in the batch: download → run → upload → delete → next
         for ((i=START_IDX; i<END_IDX; i++)); do
             IFS='|' read -r gdrive_path material short_name <<< "${ALL_VIDEOS[$i]}"
             GLOBAL_DONE=$((GLOBAL_DONE + 1))
@@ -224,24 +224,18 @@ main() {
                 GLOBAL_FAILED=$((GLOBAL_FAILED + 1))
             fi
 
-            # Delete video to free space for next (keep results until batch upload)
-            log "Removing video file..."
-            $DRY_RUN || rm -rf "$VIDEOS_DIR"
+            # Upload THIS video's results immediately
+            log "Uploading results for $short_name..."
+            if ! upload_results; then
+                err "Upload failed for $short_name!"
+                warn "Results still in: $RESULTS_DIR"
+            fi
 
-            ok "Done: $material/$short_name"
+            # Delete video AND results to free space for next video
+            cleanup "$material" "$short_name"
+
+            ok "Done: $material/$short_name ($GLOBAL_DONE/$TOTAL)"
         done
-
-        # Upload entire batch results
-        echo ""
-        log "Uploading batch $batch results..."
-        if ! upload_results; then
-            err "Upload failed for batch $batch!"
-            warn "Results still in: $RESULTS_DIR"
-            warn "Manual: rclone copy $RESULTS_DIR/ $GDRIVE_RESULTS/"
-        fi
-
-        # Clean results to free space for next batch
-        cleanup
 
         echo ""
         ok "BATCH $batch/$NUM_BATCHES COMPLETE"
