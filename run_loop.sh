@@ -19,7 +19,7 @@
 set -e
 
 # ---- CONFIGURATION (EDIT THESE) ----
-GDRIVE_VIDEOS="gdrive:MT_Chirravuri/input_videos"
+GDRIVE_VIDEOS="gdrive:DMS_Test_videos"
 GDRIVE_RESULTS="gdrive:DMS_Experiment_Results"
 WORK_DIR="$HOME/DMS_Clean"
 MODELS_DIR="$WORK_DIR/models"
@@ -34,18 +34,18 @@ ANNOTATE_POLICIES="conf_ema combined_hyst"
 # Video list: "gdrive_subpath|local_material_dir|short_name"
 # Edit this list to match your Google Drive structure
 VIDEOS=(
-    "glass_insulator_videos/glass_ins.mp4|glass|glass_ins"
-    "glass_insulator_videos/021_YUN_0001 (111).mp4|glass|021_YUN_0001"
-    "glass_insulator_videos/161_YUN_0001 (96).mp4|glass|161_YUN_0001"
-    "glass_insulator_videos/20190911-174-01.mp4|glass|174-01"
-    "glass_insulator_videos/20190912-233.mp4|glass|233"
-    "glass_insulator_videos/20190916-633-01.mp4|glass|633-01"
-    "glass_insulator_videos/20190916-722.mp4|glass|722"
-    "glass_insulator_videos/20190918-515.mp4|glass|515"
-    "glass_insulator_videos/YUN_0001 (58).mp4|glass|YUN_0001_58"
-    "porcelain_insulator_videos/UAV_porcelain.mp4|porcelain|UAV_porcelain"
-    "porcelain_insulator_videos/porce.mp4|porcelain|porce"
-    "porcelain_insulator_videos/porcelain_maybe.mp4|porcelain|porcelain_maybe"
+    "glass/glass_ins.mp4|glass|glass_ins"
+    "glass/021_YUN_0001_111.mp4|glass|021_YUN_0001_111"
+    "glass/161_YUN_0001_96.mp4|glass|161_YUN_0001_96"
+    "glass/20190911-174-01.mp4|glass|174-01"
+    "glass/20190912-233.mp4|glass|233"
+    "glass/20190916-633-01.mp4|glass|633-01"
+    "glass/20190916-722.mp4|glass|722"
+    "glass/20190918-515.mp4|glass|515"
+    "glass/YUN_0001_58.mp4|glass|YUN_0001_58"
+    "porcelain/UAV_porcelain.mp4|porcelain|UAV_porcelain"
+    "porcelain/porce.mp4|porcelain|porce"
+    "porcelain/porcelain_maybe.mp4|porcelain|porcelain_maybe"
 )
 
 DRY_RUN=false
