@@ -2217,6 +2217,11 @@ def discover_videos(videos_dir: str) -> Dict[str, List[Tuple[str, str]]]:
     videos: Dict[str, List[Tuple[str, str]]] = {}
     base = Path(videos_dir)
 
+    if not base.exists():
+        print(f"WARNING: Videos directory not found: {base}")
+        print(f"Create it or use --videos-dir to point to your videos.")
+        return videos
+
     for material_dir in sorted(base.iterdir()):
         if not material_dir.is_dir():
             continue
