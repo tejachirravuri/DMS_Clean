@@ -1507,9 +1507,15 @@ def run_frame_validation(video_path: str, material: str,
                             cv2.FONT_HERSHEY_SIMPLEX, sf_banner, (255, 255, 255), 2, cv2.LINE_AA)
                 side_by_side = np.vstack([side_by_side, banner])
 
+                # Downscale to half-resolution and save as JPEG (saves ~90% disk)
+                sbs_h, sbs_w = side_by_side.shape[:2]
+                side_by_side = cv2.resize(side_by_side, (sbs_w // 2, sbs_h // 2),
+                                          interpolation=cv2.INTER_AREA)
+
                 route_dir = "n_routed" if route == "n" else "s_routed"
-                fname = f"frame_{kept:06d}_iou{mean_iou:.3f}.png"
-                cv2.imwrite(str(p_dir / route_dir / fname), side_by_side)
+                fname = f"frame_{kept:06d}_iou{mean_iou:.3f}.jpg"
+                cv2.imwrite(str(p_dir / route_dir / fname), side_by_side,
+                            [cv2.IMWRITE_JPEG_QUALITY, 85])
 
                 frame_results.append({
                     "frame_idx": kept, "route": route, "c_val": round(c_val, 4),
@@ -1526,9 +1532,9 @@ def run_frame_validation(video_path: str, material: str,
         # Create grids (5x6 thumbnails)
         for route in ["n_routed", "s_routed"]:
             imgs_dir = p_dir / route
-            img_files = sorted(imgs_dir.glob("*.png"))[:30]
+            img_files = sorted(list(imgs_dir.glob("*.jpg")) + list(imgs_dir.glob("*.png")))[:30]
             if img_files:
-                _create_image_grid(img_files, p_dir / f"grid_{route}.png", cols=6, rows=5,
+                _create_image_grid(img_files, p_dir / f"grid_{route}.jpg", cols=6, rows=5,
                                    title=f"{p} - {route.replace('_', ' ')} samples")
 
         # Stats
@@ -1573,7 +1579,10 @@ def _create_image_grid(img_paths: list, out_path: Path, cols: int = 6, rows: int
             thumb = cv2.resize(img, (thumb_w, thumb_h), interpolation=cv2.INTER_AREA)
             y = r * thumb_h + 40
             grid[y:y + thumb_h, c * thumb_w:(c + 1) * thumb_w] = thumb
-    cv2.imwrite(str(out_path), grid)
+    if str(out_path).lower().endswith('.jpg'):
+        cv2.imwrite(str(out_path), grid, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    else:
+        cv2.imwrite(str(out_path), grid)
 
 
 # =====================================================================
