@@ -472,57 +472,68 @@ def run_model_single(model, img_bgr: np.ndarray, imgsz: int,
 
 def draw_overlay(frame: np.ndarray, dets: List[np.ndarray], choice: str,
                  header_lines: List[str], conf_show: float = 0.25) -> np.ndarray:
-    """Draw annotated overlay: colored border + boxes + header panel."""
+    """Draw annotated overlay: colored border + boxes + header panel.
+    Sizes scale with frame resolution for readability."""
     out = frame.copy()
     fh, fw = out.shape[:2]
     accent = (80, 175, 76) if choice == "n" else (96, 69, 233)
     model_label = "YOLOv8n" if choice == "n" else "YOLOv8s"
     panel_bg = (26, 14, 10)
 
+    # Scale factors based on frame height (reference: 1080p)
+    sf = max(fh / 1080, 0.5)
+
     # Border
-    border = max(8, min(fh, fw) // 50)
+    border = max(8, int(min(fh, fw) / 50 * sf))
     overlay_border = out.copy()
     cv2.rectangle(overlay_border, (0, 0), (fw - 1, fh - 1), accent, border)
     cv2.addWeighted(overlay_border, 0.75, out, 0.25, 0, out)
 
     # Boxes
+    box_thick = max(2, int(3 * sf))
+    font_box = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale_box = max(0.5, 0.8 * sf)
+    font_thick_box = max(1, int(2 * sf))
     for d in dets:
         x1, y1, x2, y2, c = map(float, d)
         if c < conf_show:
             continue
-        cv2.rectangle(out, (int(x1), int(y1)), (int(x2), int(y2)), accent, 2, cv2.LINE_AA)
+        cv2.rectangle(out, (int(x1), int(y1)), (int(x2), int(y2)), accent, box_thick, cv2.LINE_AA)
         label = f"{c:.2f}"
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        (tw, th), baseline = cv2.getTextSize(label, font, 0.5, 1)
-        lbl_y1 = max(0, int(y1) - th - baseline - 4)
+        (tw, th), baseline = cv2.getTextSize(label, font_box, font_scale_box, font_thick_box)
+        lbl_y1 = max(0, int(y1) - th - baseline - 6)
         overlay_lbl = out.copy()
-        cv2.rectangle(overlay_lbl, (int(x1), lbl_y1), (int(x1) + tw + 6, max(0, int(y1))), accent, -1)
+        cv2.rectangle(overlay_lbl, (int(x1), lbl_y1), (int(x1) + tw + 8, max(0, int(y1))), accent, -1)
         cv2.addWeighted(overlay_lbl, 0.85, out, 0.15, 0, out)
-        cv2.putText(out, label, (int(x1) + 3, max(0, int(y1)) - baseline - 1),
-                    font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(out, label, (int(x1) + 4, max(0, int(y1)) - baseline - 2),
+                    font_box, font_scale_box, (255, 255, 255), font_thick_box, cv2.LINE_AA)
 
     # Header panel
-    x0, y0 = border + 6, border + 6
-    line_h = 24
+    x0, y0 = border + 8, border + 8
+    line_h = max(24, int(36 * sf))
     font = cv2.FONT_HERSHEY_DUPLEX
-    box_w = min(700, fw - 2 * x0)
-    box_h = line_h * (len(header_lines) + 1) + 8
+    font_scale_hdr = max(0.55, 0.85 * sf)
+    font_thick_hdr = max(1, int(2 * sf))
+    box_w = min(int(900 * sf), fw - 2 * x0)
+    box_h = line_h * (len(header_lines) + 1) + int(12 * sf)
     overlay_hdr = out.copy()
     cv2.rectangle(overlay_hdr, (x0, y0), (x0 + box_w, y0 + box_h), panel_bg, -1)
     cv2.addWeighted(overlay_hdr, 0.75, out, 0.25, 0, out)
     for i, s in enumerate(header_lines):
-        cv2.putText(out, s, (x0 + 6, y0 + 14 + (i + 1) * line_h),
-                    font, 0.55, (230, 230, 230), 1, cv2.LINE_AA)
+        cv2.putText(out, s, (x0 + 8, y0 + int(18 * sf) + (i + 1) * line_h),
+                    font, font_scale_hdr, (230, 230, 230), font_thick_hdr, cv2.LINE_AA)
 
-    # Badge
-    (btw, bth), _ = cv2.getTextSize(model_label, font, 0.7, 2)
-    bx1 = fw - btw - 28 - border
+    # Badge (model label, top-right)
+    font_scale_badge = max(0.7, 1.1 * sf)
+    font_thick_badge = max(2, int(3 * sf))
+    (btw, bth), _ = cv2.getTextSize(model_label, font, font_scale_badge, font_thick_badge)
+    bx1 = fw - btw - int(32 * sf) - border
     by1 = border + 8
     overlay_badge = out.copy()
-    cv2.rectangle(overlay_badge, (bx1, by1), (fw - border - 8, by1 + bth + 16), accent, -1)
+    cv2.rectangle(overlay_badge, (bx1, by1), (fw - border - 8, by1 + bth + int(20 * sf)), accent, -1)
     cv2.addWeighted(overlay_badge, 0.85, out, 0.15, 0, out)
-    cv2.putText(out, model_label, (bx1 + 10, by1 + bth + 8),
-                font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(out, model_label, (bx1 + int(12 * sf), by1 + bth + int(10 * sf)),
+                font, font_scale_badge, (255, 255, 255), font_thick_badge, cv2.LINE_AA)
     return out
 
 
@@ -1465,10 +1476,36 @@ def run_frame_validation(video_path: str, material: str,
                 route = "n" if kept in n_sample_indices else "s"
                 c_val = n_sample_indices.get(kept, s_sample_indices.get(kept, 0.0))
 
-                # Create side-by-side image
-                vis_n = draw_overlay(frame, dets_n, "n", [f"YOLOv8n | {len(dets_n)} dets"], inf.conf_show)
-                vis_s = draw_overlay(frame, dets_s, "s", [f"YOLOv8s | {len(dets_s)} dets"], inf.conf_show)
+                # Count only visible detections (above conf_show)
+                n_vis = len([d for d in dets_n if float(d[4]) >= inf.conf_show])
+                s_vis = len([d for d in dets_s if float(d[4]) >= inf.conf_show])
+
+                # Create side-by-side image with detailed headers
+                route_arrow = "ROUTED -> n (fast)" if route == "n" else "ROUTED -> s (accurate)"
+                vis_n = draw_overlay(frame, dets_n, "n",
+                                     [f"YOLOv8n | {n_vis} dets (conf>={inf.conf_show:.2f})",
+                                      f"Frame #{kept} | IoU={mean_iou:.3f} | {route_arrow}"],
+                                     inf.conf_show)
+                vis_s = draw_overlay(frame, dets_s, "s",
+                                     [f"YOLOv8s | {s_vis} dets (conf>={inf.conf_show:.2f})",
+                                      f"Policy: {p} | C={c_val:.4f}"],
+                                     inf.conf_show)
                 side_by_side = np.hstack([vis_n, vis_s])
+
+                # Add a colored route banner at the bottom
+                fh_sbs, fw_sbs = side_by_side.shape[:2]
+                banner_h = max(40, int(fh_sbs / 25))
+                banner = np.zeros((banner_h, fw_sbs, 3), dtype=np.uint8)
+                banner_color = (80, 175, 76) if route == "n" else (96, 69, 233)
+                banner[:] = banner_color
+                banner_text = f"Policy: {p}  |  {route_arrow}  |  n_dets={n_vis}  s_dets={s_vis}  |  IoU={mean_iou:.3f}"
+                sf_banner = max(0.6, banner_h / 55)
+                (btw, bth), _ = cv2.getTextSize(banner_text, cv2.FONT_HERSHEY_SIMPLEX, sf_banner, 2)
+                tx = (fw_sbs - btw) // 2
+                ty = (banner_h + bth) // 2
+                cv2.putText(banner, banner_text, (tx, ty),
+                            cv2.FONT_HERSHEY_SIMPLEX, sf_banner, (255, 255, 255), 2, cv2.LINE_AA)
+                side_by_side = np.vstack([side_by_side, banner])
 
                 route_dir = "n_routed" if route == "n" else "s_routed"
                 fname = f"frame_{kept:06d}_iou{mean_iou:.3f}.png"
