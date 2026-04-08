@@ -1974,33 +1974,50 @@ def _plot_grand_speedup_vs_sonly(grand: dict, out_path: Path):
 
 
 def _plot_timing_timeseries(s: RunSummary, out_path: Path):
-    fig, ax = plt.subplots(figsize=(14, 5))
-    frames = s.frame_indices
-    totals = s.T_total_trace
+    frames = np.array(s.frame_indices)
+    totals = np.array(s.T_total_trace)
     choices = s.choice_trace
 
     n_mask = [i for i, c in enumerate(choices) if c == "n"]
     s_mask = [i for i, c in enumerate(choices) if c == "s"]
 
+    # Compute stats for y-axis and annotations
+    p50 = float(np.median(totals)) if len(totals) else 0
+    p95 = float(np.quantile(totals, 0.95)) if len(totals) else 0
+    p99 = float(np.quantile(totals, 0.99)) if len(totals) else 0
+    n_mean = float(np.mean([totals[i] for i in n_mask])) if n_mask else 0
+    s_mean = float(np.mean([totals[i] for i in s_mask])) if s_mask else 0
+    n_outliers = sum(1 for i in n_mask if totals[i] > p95 * 1.5)
+    s_outliers = sum(1 for i in s_mask if totals[i] > p95 * 1.5)
+
+    # Cap y-axis at p99 * 1.3 to show the real distribution, not outlier spikes
+    y_cap = max(p99 * 1.3, p95 * 1.5, 50.0)
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+
     if n_mask:
-        ax.scatter([frames[i] for i in n_mask], [totals[i] for i in n_mask],
-                   s=2, c="#4CAF50", alpha=0.5, label="n-model")
+        ax.scatter([frames[i] for i in n_mask], [min(totals[i], y_cap) for i in n_mask],
+                   s=6, c="#4CAF50", alpha=0.5, label=f"n-model (mean={n_mean:.0f}ms)", zorder=2)
     if s_mask:
-        ax.scatter([frames[i] for i in s_mask], [totals[i] for i in s_mask],
-                   s=2, c="#F44336", alpha=0.5, label="s-model")
+        ax.scatter([frames[i] for i in s_mask], [min(totals[i], y_cap) for i in s_mask],
+                   s=6, c="#E53935", alpha=0.5, label=f"s-model (mean={s_mean:.0f}ms)", zorder=2)
 
-    # Rolling average
-    if len(totals) > 50:
-        kernel = np.ones(50) / 50
-        rolling = np.convolve(totals, kernel, mode="valid")
-        ax.plot(frames[:len(rolling)], rolling, color="black", linewidth=1.5, alpha=0.7, label="50-frame avg")
+    # Reference lines for key percentiles
+    ax.axhline(y=n_mean, color="#4CAF50", linestyle="--", linewidth=1.0, alpha=0.6)
+    ax.axhline(y=s_mean, color="#E53935", linestyle="--", linewidth=1.0, alpha=0.6)
+    ax.axhline(y=p95, color="#FF9800", linestyle=":", linewidth=1.0, alpha=0.5,
+               label=f"p95={p95:.0f}ms")
 
+    ax.set_ylim(0, y_cap)
     ax.set_xlabel("Frame")
     ax.set_ylabel("T_total (ms)")
-    ax.set_title(f"Timing: {s.video} | {s.policy} | mean={s.T_total_ms_mean:.1f}ms")
-    ax.legend(markerscale=5)
+    ax.set_title(f"Timing: {s.video} | {s.policy} | "
+                 f"mean={s.T_total_ms_mean:.1f}ms  median={p50:.0f}ms  "
+                 f"p95={p95:.0f}ms  ({n_outliers + s_outliers} outliers clipped)")
+    ax.legend(markerscale=3, loc="upper right", fontsize=9)
+    ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig.savefig(out_path)
+    fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
 
