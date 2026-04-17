@@ -1,0 +1,29 @@
+{
+  "stage": "08_build_master_table",
+  "run_name": "smoke_test_v1",
+  "config_path": "G:\\Teja_Master_Thesis\\thesis_offline_validation\\configs\\offline_validation_smoke.yaml",
+  "feature_config_path": "G:\\Teja_Master_Thesis\\thesis_offline_validation\\configs\\feature_sets.yaml",
+  "targets_config_path": "G:\\Teja_Master_Thesis\\thesis_offline_validation\\configs\\targets.yaml",
+  "environment": {
+    "timestamp_utc": "2026-04-17T23:27:56.975464+00:00",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python_version": "3.10.19",
+    "hostname": "Teja",
+    "cwd": "G:\\Teja_Master_Thesis",
+    "packages": {
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "pyarrow": "21.0.0",
+      "opencv-python": "4.12.0.88",
+      "PyYAML": "6.0.3",
+      "ultralytics": "8.3.229"
+    }
+  },
+  "rows": 12,
+  "columns": 89,
+  "cli_args": {
+    "config": "thesis_offline_validation\\configs\\offline_validation_smoke.yaml",
+    "feature_config": "thesis_offline_validation\\configs\\feature_sets.yaml",
+    "targets_config": "thesis_offline_validation\\configs\\targets.yaml"
+  }
+}

@@ -1,0 +1,73 @@
+column,availability,controller_allowed,description
+lap_var,pre,True,Laplacian variance image sharpness
+gray_entropy,pre,True,Grayscale Shannon entropy
+color_entropy,pre,True,HSV color entropy
+tenengrad,pre,True,Sobel gradient energy
+brenner,pre,True,Brenner gradient focus proxy
+edge_density,pre,True,Fraction of edge pixels
+local_contrast,pre,True,Mean local absolute luminance deviation
+mean_luma,pre,True,Global mean grayscale intensity
+std_luma,pre,True,Global grayscale standard deviation
+rms_contrast,pre,True,RMS contrast proxy
+n_det_count,post_n,True,YOLOv8n detection count
+n_mean_conf,post_n,True,YOLOv8n mean confidence
+n_max_conf,post_n,True,YOLOv8n max confidence
+n_conf_std,post_n,True,YOLOv8n confidence std
+n_total_area_norm,post_n,True,YOLOv8n normalized total detection area
+n_zero_det_flag,post_n,True,YOLOv8n zero-detection flag
+lap_var_delta_1,pre,True,First-order Laplacian delta
+gray_entropy_delta_1,pre,True,First-order entropy delta
+n_mean_conf_delta_1,post_n,True,First-order confidence delta
+n_det_count_delta_1,post_n,True,First-order detection count delta
+n_mean_conf_ema_fast,post_n,True,Fast EMA on YOLOv8n mean confidence
+n_mean_conf_ema_slow,post_n,True,Slow EMA on YOLOv8n mean confidence
+conf_drop,post_n,True,Relative drop between slow and fast confidence EMAs
+zero_det_streak,post_n,True,Consecutive zero-detection frames from YOLOv8n
+roi_best_conf,post_n,True,Confidence of highest-confidence n ROI
+roi_best_area_norm,post_n,True,Area of highest-confidence n ROI
+roi_lap_var,post_n,True,ROI Laplacian variance
+roi_gray_entropy,post_n,True,ROI grayscale entropy
+matched_count,offline_only,False,Number of matched n/s detections per frame
+matched_fraction_s,offline_only,False,Fraction of s detections matched by n
+mean_iou,offline_only,False,Mean IoU across matched n/s detections
+iou_disagreement,offline_only,False,One minus mean matched IoU
+det_count_gap,offline_only,False,s minus n detection count gap
+extra_dets_s_norm,offline_only,False,Extra s detections normalized by s count
+n_infer_ms,offline_only,False,Offline YOLOv8n inference time summary
+s_infer_ms,offline_only,False,Offline YOLOv8s inference time summary
+n_det_count_ref,offline_only,False,Reference n detection count used during target construction
+n_mean_conf_ref,offline_only,False,Reference n mean confidence used during target construction
+n_max_conf_ref,offline_only,False,Reference n max confidence used during target construction
+n_conf_std_ref,offline_only,False,Reference n confidence std used during target construction
+n_total_area_norm_ref,offline_only,False,Reference n total area used during target construction
+n_zero_det_flag_ref,offline_only,False,Reference n zero-detection flag used during target construction
+s_det_count_ref,offline_only,False,Reference s detection count used during target construction
+s_mean_conf_ref,offline_only,False,Reference s mean confidence used during target construction
+s_max_conf_ref,offline_only,False,Reference s max confidence used during target construction
+s_conf_std_ref,offline_only,False,Reference s confidence std used during target construction
+s_total_area_norm_ref,offline_only,False,Reference s total area used during target construction
+s_zero_det_flag_ref,offline_only,False,Reference s zero-detection flag used during target construction
+n_det_count_outcome,offline_only,False,Offline n outcome detection count
+n_mean_conf_outcome,offline_only,False,Offline n outcome mean confidence
+n_max_conf_outcome,offline_only,False,Offline n outcome max confidence
+n_conf_std_outcome,offline_only,False,Offline n outcome confidence std
+n_total_area_norm_outcome,offline_only,False,Offline n outcome total detection area
+n_zero_det_flag_outcome,offline_only,False,Offline n outcome zero-detection flag
+s_det_count_outcome,offline_only,False,Offline s outcome detection count
+s_mean_conf_outcome,offline_only,False,Offline s outcome mean confidence
+s_max_conf_outcome,offline_only,False,Offline s outcome max confidence
+s_conf_std_outcome,offline_only,False,Offline s outcome confidence std
+s_total_area_norm_outcome,offline_only,False,Offline s outcome total detection area
+s_zero_det_flag_outcome,offline_only,False,Offline s outcome zero-detection flag
+extra_dets_s,offline_only,False,Detections only YOLOv8s finds
+extra_dets_n,offline_only,False,Detections only YOLOv8n finds
+delta_quality,offline_only,False,Weighted offline quality delta proxy
+benefit_score,offline_only,False,Weighted offline benefit score
+latency_penalty,offline_only,False,Offline latency penalty from delta inference time
+delta_infer_ms,offline_only,False,s minus n inference time
+y_hard_binary,offline_only,False,Binary hard-frame label
+y_benefit_count,offline_only,False,Count-based benefit target
+y_benefit_conf,offline_only,False,Confidence-gap benefit target
+y_benefit_iou,offline_only,False,IoU-disagreement benefit target
+y_disagreement_continuous,offline_only,False,Continuous disagreement target
+y_switch_optimal,offline_only,False,Offline switch-optimal label

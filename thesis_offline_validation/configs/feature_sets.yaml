@@ -1,0 +1,42 @@
+feature_groups:
+  image:
+    enabled: true
+    columns:
+      - lap_var
+      - gray_entropy
+      - color_entropy
+      - tenengrad
+      - brenner
+      - edge_density
+      - local_contrast
+      - mean_luma
+      - std_luma
+      - rms_contrast
+  detection_state:
+    enabled: true
+    columns:
+      - n_det_count
+      - n_mean_conf
+      - n_max_conf
+      - n_conf_std
+      - n_total_area_norm
+      - n_zero_det_flag
+  temporal:
+    enabled: true
+    columns:
+      - lap_var_delta_1
+      - gray_entropy_delta_1
+      - n_mean_conf_delta_1
+      - n_det_count_delta_1
+      - n_mean_conf_ema_fast
+      - n_mean_conf_ema_slow
+      - conf_drop
+      - zero_det_streak
+  roi:
+    enabled: true
+    columns:
+      - roi_best_conf
+      - roi_best_area_norm
+      - roi_lap_var
+      - roi_gray_entropy
+
