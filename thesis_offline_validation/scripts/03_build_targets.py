@@ -40,7 +40,16 @@ def main() -> None:
         sum_s = read_table(sum_s_path)
 
         matching_df = build_frame_matching(ctx, manifest_df, det_n, det_s)
-        targets_df = build_targets(ctx, matching_df, sum_n, sum_s)
+        targets_df = build_targets(ctx, matching_df, sum_n, sum_s, det_n=det_n, det_s=det_s)
+        target_version = str(ctx["config"].get("project", {}).get("target_version", "v1"))
+        if target_version == "v2":
+            print(f"[03_build_targets] target_version={target_version}")
+            print(f"[03_build_targets] saved target columns: {list(targets_df.columns)}")
+            print(
+                "[03_build_targets] has extra_valid_dets_s="
+                f"{'extra_valid_dets_s' in targets_df.columns}, "
+                f"has benefit_score_v2={'benefit_score_v2' in targets_df.columns}"
+            )
         record_stage_run(
             ctx,
             "03_build_targets",
