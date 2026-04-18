@@ -1,0 +1,55 @@
+reference_mode: s_pseudo_oracle
+
+targets:
+  hard_binary:
+    min_extra_dets_s: 1
+    min_benefit_score: 0.20
+  switch_optimal:
+    min_margin: 0.0
+
+weights:
+  delta_quality:
+    extra_dets_s: 1.0
+    extra_dets_n: 0.5
+    mean_conf_gap: 0.5
+    iou_disagreement: 0.5
+  benefit_score:
+    benefit_count: 1.0
+    benefit_conf: 0.5
+    benefit_iou: 0.5
+    disagreement: 1.0
+  disagreement_score:
+    det_count_gap: 0.30
+    mean_conf_gap: 0.25
+    iou_disagreement: 0.25
+    extra_dets_s_norm: 0.20
+  latency_penalty:
+    delta_infer_ms: 0.01
+
+versions:
+  v2:
+    reference_mode: s_pseudo_oracle
+    valid_detections:
+      tau_conf_valid: 0.35
+      tau_area_min: 0.0005
+      top_k: 0
+      geometry:
+        enabled: false
+        aspect_ratio_min: 0.0
+        aspect_ratio_max: 1000000.0
+    targets:
+      hard_binary:
+        min_extra_valid_dets_s: 1
+        tau_hard: 1.00
+      switch_optimal:
+        min_margin: 0.10
+    weights:
+      disagreement_score:
+        benefit_count: 1.0
+        benefit_conf: 0.5
+        localization_disagreement: 0.5
+      benefit_score_v2:
+        benefit_count: 1.0
+        benefit_conf: 0.5
+      latency_penalty:
+        delta_infer_ms: 0.01
