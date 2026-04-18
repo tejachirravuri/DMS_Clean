@@ -38,7 +38,8 @@ def _parse_run(value: str) -> tuple[str, Path]:
 def _load_run(run_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     manifest = pd.read_parquet(run_dir / "manifest" / "frame_manifest.parquet")
     master = pd.read_parquet(run_dir / "master" / "master_table.parquet")
-    return manifest, master
+    targets = pd.read_parquet(run_dir / "targets" / "targets.parquet")
+    return manifest, master, targets
 
 
 def _per_video_rates(master: pd.DataFrame, column: str) -> pd.DataFrame:
@@ -52,7 +53,7 @@ def _per_video_rates(master: pd.DataFrame, column: str) -> pd.DataFrame:
 
 
 def report_run(label: str, run_dir: Path) -> None:
-    manifest, master = _load_run(run_dir)
+    manifest, master, targets = _load_run(run_dir)
 
     print(f"\n=== {label} ===")
     print(f"run_dir: {run_dir}")
@@ -69,14 +70,34 @@ def report_run(label: str, run_dir: Path) -> None:
     print("\n[D] Per-video positive rates: y_switch_optimal")
     print(_per_video_rates(master, "y_switch_optimal").to_string(index=False))
 
+    targets_cols = ["frame_key"]
+    for col in ["extra_valid_dets_s", "matched_valid_pair_count"]:
+        if col in master.columns:
+            master[col] = master[col]
+        elif col in targets.columns:
+            targets_cols.append(col)
+        else:
+            print(f"\n[Notice] Column '{col}' not found in master_table.parquet or targets.parquet")
+
+    merged = master
+    if len(targets_cols) > 1:
+        merged = master.merge(
+            targets[targets_cols].drop_duplicates(subset=["frame_key"]),
+            on="frame_key",
+            how="left",
+            validate="one_to_one",
+        )
+
     print("\n[E] extra_valid_dets_s")
-    print(_summary(master["extra_valid_dets_s"]))
-    print(f"frames with extra_valid_dets_s >= 1: {int((master['extra_valid_dets_s'] >= 1).sum())}")
-    print(f"frames with extra_valid_dets_s >= 2: {int((master['extra_valid_dets_s'] >= 2).sum())}")
+    if "extra_valid_dets_s" in merged.columns:
+        print(_summary(merged["extra_valid_dets_s"]))
+        print(f"frames with extra_valid_dets_s >= 1: {int((merged['extra_valid_dets_s'] >= 1).sum())}")
+        print(f"frames with extra_valid_dets_s >= 2: {int((merged['extra_valid_dets_s'] >= 2).sum())}")
 
     print("\n[F] matched_valid_pair_count")
-    print(_summary(master["matched_valid_pair_count"]))
-    print(f"frames with matched_valid_pair_count == 0: {int((master['matched_valid_pair_count'] == 0).sum())}")
+    if "matched_valid_pair_count" in merged.columns:
+        print(_summary(merged["matched_valid_pair_count"]))
+        print(f"frames with matched_valid_pair_count == 0: {int((merged['matched_valid_pair_count'] == 0).sum())}")
 
 
 def main() -> None:
